@@ -1,4 +1,5 @@
 const axios = require('axios');
+const request = require('request');
 const { RestClientV5 } = require('bybit-api');
 
 // Módulo para KuCoin
@@ -10,8 +11,8 @@ async function getKuCoinOrderBook(symbol, depth) {
         const bids = response.data.data.bids.map(b => ([parseFloat(b[0]), parseFloat(b[1])]));
         return { asks, bids };
     } catch (error) {
-        console.error(`Error fetching KuCoin order book for ${symbol}: ${error.message}`);
-        return null;
+                return null;
+console.error(`Error fetching KuCoin order book for ${symbol}: ${error.message}`);
     }
 }
 
@@ -27,8 +28,8 @@ async function getKrakenOrderbook(currencyPair) {
         const bids = response.data.result[resultKey].bids.map(b => ([parseFloat(b[0]), parseFloat(b[1])]));
         return { asks, bids };
     } catch (error) {
-        console.error(`Error fetching Kraken order book for ${currencyPair}: ${error.message}`);
-        return null;
+                return null;
+console.error(`Error fetching Kraken order book for ${currencyPair}: ${error.message}`);
     }
 }
 
@@ -41,56 +42,73 @@ async function getBybitOrderbook(symbol) {
         const bids = response.result.b.map(b => ([parseFloat(b[0]), parseFloat(b[1])]));
         return { asks, bids };
     } catch (error) {
-        console.error(`Error fetching Bybit order book for ${symbol}: ${error.message}`);
         return null;
+            console.error(`Error fetching Bybit order book for ${symbol}: ${error.message}`);
+}
+}
+
+// Módulo para Bibox
+async function getBiboxOrderBook(symbol) {
+    const url = `https://api.bibox.com/api/v4/marketdata/order_book?symbol=${symbol}`;
+    try {
+        const response = await axios.get(url);
+        const data = JSON.parse(response.data);
+        const asks = data.result.asks.map(a => ([parseFloat(a.price), parseFloat(a.volume)]));
+        const bids = data.result.bids.map(b => ([parseFloat(b.price), parseFloat(b.volume)]));
+        return { asks, bids };
+    } catch (error) {
+        return null;
+        console.error(`Error fetching Bibox order book for ${symbol}: ${error.message}`);
+        //return null;
     }
 }
 
 // Função de Arbitragem Genérica
 function checkArbitrageOpportunity(currency, exchanges) {
     const profits = [];
-
     for (let i = 0; i < exchanges.length; i++) {
         for (let j = i + 1; j < exchanges.length; j++) {
             const ex1 = exchanges[i];
             const ex2 = exchanges[j];
             if (ex1.data && ex2.data) {
-                const buyPrice = ex1.data.asks[0][0]; // preço de compra no ask mais baixo
-                const sellPrice = ex2.data.bids[0][0]; // preço de venda no bid mais alto
-
+                const buyPrice = ex1.data.asks[0][0];
+                const sellPrice = ex2.data.bids[0][0];
                 const profit = ((sellPrice - buyPrice) / buyPrice) * 100;
-                if (profit > 0) {
+                if (profit > 0.05) {
                     profits.push(`Arbitrage opportunity: Buy ${currency} at ${ex1.name} for ${buyPrice}, sell at ${ex2.name} for ${sellPrice}. Profit: ${profit.toFixed(2)}%.`);
                 }
             }
         }
     }
-
     if (profits.length > 0) {
         profits.forEach(p => console.log(p));
     } else {
+return null;
         console.log(`No significant arbitrage opportunities found for ${currency}.`);
     }
 }
 
 // Execução do script
 async function runCheck(currency) {
-    console.log(`Checking for arbitrage opportunities for ${currency}...`);
+    //console.log(`Checking for arbitrage opportunities for ${currency}...`);
 
     const krakenPair = currency === 'BTC' ? 'XXBTZUSD' : `${currency}USD`;
     const bybitSymbol = `${currency}USDT`;
     const kuCoinSymbol = `${currency}-USDT`;
+    const biboxSymbol = `${currency}_USDT`;
 
-    const [kraken, bybit, kuCoin] = await Promise.all([
+    const [kraken, bybit, kuCoin, bibox] = await Promise.all([
         getKrakenOrderbook(krakenPair),
         getBybitOrderbook(bybitSymbol),
-        getKuCoinOrderBook(kuCoinSymbol, 20)
+        getKuCoinOrderBook(kuCoinSymbol, 20),
+        getBiboxOrderBook(biboxSymbol)
     ]);
 
     checkArbitrageOpportunity(currency, [
         { name: 'Kraken', data: kraken },
         { name: 'Bybit', data: bybit },
-        { name: 'KuCoin', data: kuCoin }
+        { name: 'KuCoin', data: kuCoin },
+        { name: 'Bibox', data: bibox }
     ]);
 }
 
@@ -103,3 +121,8 @@ if (currencies.length === 0) {
 currencies.forEach(currency => {
     runCheck(currency);
 });
+setInterval(() => {
+    currencies.forEach(currency => {
+        runCheck(currency);
+    });
+}, 30000);
